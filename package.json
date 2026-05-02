@@ -1,0 +1,13 @@
+{
+  "name": "vocab-nest",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "generate:api": "pnpm --filter @vocab-nest/api openapi:write && pnpm --filter @vocab-nest/web generate:api",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.26.0+sha512.3b3f6c725ebe712506c0ab1ad4133cf86b1f4b687effce62a9b38b4d72e3954242e643190fc51fa1642949c735f403debd44f5cb0edd657abe63a8b6a7e1e402"
+}
