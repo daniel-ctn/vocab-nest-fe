@@ -15,7 +15,7 @@ export const VocabularyEntrySchema = z.object({
 })
 
 export const VocabularySearchRequestSchema = z.object({
-  query: z.string().min(1),
+  query: z.string().min(1).max(200),
   language: z.string().min(2).optional(),
 })
 

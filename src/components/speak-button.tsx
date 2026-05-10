@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Volume2 } from 'lucide-react'
 
 export function SpeakButton({
   text,
+  lang,
   className,
 }: {
   text: string
+  lang?: string
   className?: string
 }) {
   const [speaking, setSpeaking] = useState(false)
@@ -18,13 +20,21 @@ export function SpeakButton({
     window.speechSynthesis.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-US'
+    utterance.lang = lang || 'en-US'
     utterance.onstart = () => setSpeaking(true)
     utterance.onend = () => setSpeaking(false)
     utterance.onerror = () => setSpeaking(false)
 
     window.speechSynthesis.speak(utterance)
-  }, [text])
+  }, [text, lang])
+
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
 
   if (!('speechSynthesis' in window)) return null
 

@@ -4,7 +4,8 @@ import { and, eq, ilike, or, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { vocabularyEntries, vocabularyReviewStats } from '@/lib/db/schema'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
+import { rateLimit } from '@/lib/rate-limit'
 import {
   CreateVocabularyRequestSchema,
   UpdateVocabularyRequestSchema,
@@ -15,35 +16,42 @@ import {
 export async function createVocabulary(
   input: unknown
 ): Promise<{ id: string }> {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = CreateVocabularyRequestSchema.parse(input)
+
+  const limit = rateLimit(`create:${user.id}`, 20, 60_000)
+  if (!limit.success) {
+    throw new Error('Rate limit exceeded. Please slow down.')
+  }
 
   const id = crypto.randomUUID()
   const now = new Date()
 
-  await db.insert(vocabularyEntries).values({
-    id,
-    userId: user.id,
-    term: data.term,
-    definition: data.definition,
-    language: data.language ?? null,
-    partOfSpeech: data.partOfSpeech ?? null,
-    examples: data.examples ?? [],
-    tags: data.tags ?? [],
-    createdAt: now,
-    updatedAt: now,
-  })
+  await db.transaction(async (tx) => {
+    await tx.insert(vocabularyEntries).values({
+      id,
+      userId: user.id,
+      term: data.term,
+      definition: data.definition,
+      language: data.language ?? null,
+      partOfSpeech: data.partOfSpeech ?? null,
+      examples: data.examples ?? [],
+      tags: data.tags ?? [],
+      createdAt: now,
+      updatedAt: now,
+    })
 
-  await db.insert(vocabularyReviewStats).values({
-    vocabularyId: id,
-    nextReviewAt: now,
-    intervalDays: 1,
-    easeFactor: 250,
-    consecutiveCorrect: 0,
-    totalReviews: 0,
-    totalCorrect: 0,
-    createdAt: now,
-    updatedAt: now,
+    await tx.insert(vocabularyReviewStats).values({
+      vocabularyId: id,
+      nextReviewAt: now,
+      intervalDays: 1,
+      easeFactor: 250,
+      consecutiveCorrect: 0,
+      totalReviews: 0,
+      totalCorrect: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
   })
 
   revalidatePath('/vocabulary')
@@ -52,7 +60,7 @@ export async function createVocabulary(
 }
 
 export async function updateVocabulary(id: string, input: unknown) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = UpdateVocabularyRequestSchema.parse(input)
 
   const owned = await db
@@ -86,7 +94,7 @@ export async function updateVocabulary(id: string, input: unknown) {
 }
 
 export async function deleteVocabulary(id: string) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
 
   const owned = await db
     .select({ id: vocabularyEntries.id })
@@ -109,8 +117,13 @@ export async function deleteVocabulary(id: string) {
 export async function searchVocabulary(
   input: unknown
 ): Promise<VocabularySearchResult[]> {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = VocabularySearchRequestSchema.parse(input)
+
+  const limit = rateLimit(`search:${user.id}`, 30, 60_000)
+  if (!limit.success) {
+    throw new Error('Rate limit exceeded. Please slow down.')
+  }
 
   const q = `%${data.query}%`
 
@@ -161,39 +174,50 @@ type BulkEntry = {
   tags?: string[]
 }
 
+const BULK_IMPORT_MAX = 100
+
 export async function bulkCreateVocabulary(
   entries: BulkEntry[]
 ): Promise<{ created: number; failed: number }> {
-  const user = await getCurrentUser()
+  const user = await requireUser()
+
+  const limit = rateLimit(`bulk:${user.id}`, 3, 60_000)
+  if (!limit.success) {
+    throw new Error('Rate limit exceeded. Please wait a minute.')
+  }
+
+  if (entries.length > BULK_IMPORT_MAX) {
+    throw new Error(`Maximum ${BULK_IMPORT_MAX} entries per import.`)
+  }
+
   const now = new Date()
+  const validEntries = entries.filter(
+    (e) => e.term.trim().length > 0 && e.definition.trim().length > 0
+  )
 
-  let created = 0
-  let failed = 0
+  if (validEntries.length === 0) {
+    return { created: 0, failed: entries.length }
+  }
 
-  for (const entry of entries) {
-    if (!entry.term.trim() || !entry.definition.trim()) {
-      failed++
-      continue
-    }
+  const created = await db.transaction(async (tx) => {
+    const vocabRows = validEntries.map((entry) => ({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      term: entry.term.trim(),
+      definition: entry.definition.trim(),
+      language: null,
+      partOfSpeech: null,
+      examples: [],
+      tags: entry.tags ?? [],
+      createdAt: now,
+      updatedAt: now,
+    }))
 
-    try {
-      const id = crypto.randomUUID()
+    await tx.insert(vocabularyEntries).values(vocabRows)
 
-      await db.insert(vocabularyEntries).values({
-        id,
-        userId: user.id,
-        term: entry.term.trim(),
-        definition: entry.definition.trim(),
-        language: null,
-        partOfSpeech: null,
-        examples: [],
-        tags: entry.tags ?? [],
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      await db.insert(vocabularyReviewStats).values({
-        vocabularyId: id,
+    await tx.insert(vocabularyReviewStats).values(
+      vocabRows.map((row) => ({
+        vocabularyId: row.id,
         nextReviewAt: now,
         intervalDays: 1,
         easeFactor: 250,
@@ -202,18 +226,14 @@ export async function bulkCreateVocabulary(
         totalCorrect: 0,
         createdAt: now,
         updatedAt: now,
-      })
+      }))
+    )
 
-      created++
-    } catch {
-      failed++
-    }
-  }
+    return vocabRows.length
+  })
 
-  if (created > 0) {
-    revalidatePath('/vocabulary')
-    revalidatePath('/dashboard')
-  }
+  revalidatePath('/vocabulary')
+  revalidatePath('/dashboard')
 
-  return { created, failed }
+  return { created, failed: entries.length - created }
 }

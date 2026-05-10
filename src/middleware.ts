@@ -15,5 +15,7 @@ export const config = {
     '/groups/:path*',
     '/practice/:path*',
     '/vocabulary/:path*',
+    '/stats/:path*',
+    '/admin/:path*',
   ],
 }

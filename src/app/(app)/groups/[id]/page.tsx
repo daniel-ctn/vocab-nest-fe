@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft, BookOpen, BrainCircuit, Tag } from 'lucide-react'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import {
   getGroupWithVocabulary,
   listVocabularyNotInGroup,
@@ -52,7 +52,7 @@ export default async function GroupDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = await getGroupWithVocabulary(id, user.id)
   if (!data) {
     redirect('/groups')

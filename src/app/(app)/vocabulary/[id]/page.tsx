@@ -11,7 +11,7 @@ import {
   Tag,
   TrendingUp,
 } from 'lucide-react'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import { getVocabularyDetail } from '@/lib/data/vocabulary'
 import { SpeakButton } from '@/components/speak-button'
 
@@ -21,7 +21,7 @@ export default async function VocabularyDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = await getVocabularyDetail(id, user.id)
   if (!data) {
     redirect('/vocabulary')

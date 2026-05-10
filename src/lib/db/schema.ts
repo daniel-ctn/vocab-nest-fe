@@ -1,11 +1,13 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 
 // Better Auth tables
@@ -60,31 +62,39 @@ export const verification = pgTable('verification', {
 })
 
 // App tables
-export const vocabularyEntries = pgTable('vocabulary_entries', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  term: text('term').notNull(),
-  definition: text('definition').notNull(),
-  language: text('language'),
-  partOfSpeech: text('part_of_speech'),
-  examples: jsonb('examples').$type<string[]>().notNull().default([]),
-  tags: jsonb('tags').$type<string[]>().notNull().default([]),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const vocabularyEntries = pgTable(
+  'vocabulary_entries',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    term: text('term').notNull(),
+    definition: text('definition').notNull(),
+    language: text('language'),
+    partOfSpeech: text('part_of_speech'),
+    examples: jsonb('examples').$type<string[]>().notNull().default([]),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('vocab_user_idx').on(t.userId)]
+)
 
-export const groups = pgTable('groups', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  description: text('description'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const groups = pgTable(
+  'groups',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('groups_user_idx').on(t.userId)]
+)
 
 export const vocabularyGroups = pgTable(
   'vocabulary_groups',
@@ -96,57 +106,90 @@ export const vocabularyGroups = pgTable(
       .notNull()
       .references(() => groups.id, { onDelete: 'cascade' }),
   },
-  (t) => [primaryKey({ columns: [t.vocabularyId, t.groupId] })]
+  (t) => [
+    primaryKey({ columns: [t.vocabularyId, t.groupId] }),
+    index('vocab_groups_group_idx').on(t.groupId),
+    index('vocab_groups_vocab_idx').on(t.vocabularyId),
+  ]
 )
 
-export const practiceSessions = pgTable('practice_sessions', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  groupId: text('group_id').references(() => groups.id, {
-    onDelete: 'cascade',
-  }),
-  date: text('date').notNull(),
-  status: text('status').notNull().default('pending'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const practiceSessions = pgTable(
+  'practice_sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    groupId: text('group_id').references(() => groups.id, {
+      onDelete: 'cascade',
+    }),
+    date: text('date').notNull(),
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('practice_sessions_user_date_idx').on(t.userId, t.date),
+    uniqueIndex('practice_sessions_user_date_group_uidx').on(
+      t.userId,
+      t.date,
+      t.groupId
+    ),
+  ]
+)
 
-export const practiceItems = pgTable('practice_items', {
-  id: text('id').primaryKey(),
-  practiceSessionId: text('practice_session_id')
-    .notNull()
-    .references(() => practiceSessions.id, { onDelete: 'cascade' }),
-  vocabularyId: text('vocabulary_id')
-    .notNull()
-    .references(() => vocabularyEntries.id, { onDelete: 'cascade' }),
-  prompt: text('prompt').notNull(),
-  dueAt: timestamp('due_at').notNull(),
-  reviewedAt: timestamp('reviewed_at'),
-  remembered: boolean('remembered'),
-  answer: text('answer'),
-})
+export const practiceItems = pgTable(
+  'practice_items',
+  {
+    id: text('id').primaryKey(),
+    practiceSessionId: text('practice_session_id')
+      .notNull()
+      .references(() => practiceSessions.id, { onDelete: 'cascade' }),
+    vocabularyId: text('vocabulary_id')
+      .notNull()
+      .references(() => vocabularyEntries.id, { onDelete: 'cascade' }),
+    prompt: text('prompt').notNull(),
+    dueAt: timestamp('due_at').notNull(),
+    reviewedAt: timestamp('reviewed_at'),
+    remembered: boolean('remembered'),
+    answer: text('answer'),
+  },
+  (t) => [
+    index('practice_items_session_idx').on(t.practiceSessionId),
+    index('practice_items_vocab_idx').on(t.vocabularyId),
+  ]
+)
 
-export const userStats = pgTable('user_stats', {
-  userId: text('user_id')
-    .primaryKey()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  streakDays: integer('streak_days').notNull().default(0),
-  lastPracticeDate: text('last_practice_date'),
-  dailyGoal: integer('daily_goal').notNull().default(10),
-})
+export const userStats = pgTable(
+  'user_stats',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    streakDays: integer('streak_days').notNull().default(0),
+    lastPracticeDate: text('last_practice_date'),
+    dailyGoal: integer('daily_goal').notNull().default(10),
+  },
+  (t) => [index('user_stats_user_idx').on(t.userId)]
+)
 
-export const vocabularyReviewStats = pgTable('vocabulary_review_stats', {
-  vocabularyId: text('vocabulary_id')
-    .primaryKey()
-    .references(() => vocabularyEntries.id, { onDelete: 'cascade' }),
-  nextReviewAt: timestamp('next_review_at').notNull().defaultNow(),
-  intervalDays: integer('interval_days').notNull().default(1),
-  easeFactor: integer('ease_factor').notNull().default(250), // stored as hundredths (2.50 = 250)
-  consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
-  totalReviews: integer('total_reviews').notNull().default(0),
-  totalCorrect: integer('total_correct').notNull().default(0),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const vocabularyReviewStats = pgTable(
+  'vocabulary_review_stats',
+  {
+    vocabularyId: text('vocabulary_id')
+      .primaryKey()
+      .references(() => vocabularyEntries.id, { onDelete: 'cascade' }),
+    nextReviewAt: timestamp('next_review_at').notNull().defaultNow(),
+    intervalDays: integer('interval_days').notNull().default(1),
+    easeFactor: integer('ease_factor').notNull().default(250), // stored as hundredths (2.50 = 250)
+    consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
+    totalReviews: integer('total_reviews').notNull().default(0),
+    totalCorrect: integer('total_correct').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('review_stats_vocab_idx').on(t.vocabularyId),
+    index('review_stats_next_review_idx').on(t.nextReviewAt),
+  ]
+)

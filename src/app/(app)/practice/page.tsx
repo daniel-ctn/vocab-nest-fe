@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, BrainCircuit } from 'lucide-react'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import { getOrCreateTodayPractice } from '@/lib/data/practice'
 import { getGroupWithVocabulary } from '@/lib/data/groups'
 import { PracticeRunner } from './practice-runner'
@@ -11,7 +11,7 @@ export default async function PracticePage({
   searchParams: Promise<{ group?: string }>
 }) {
   const { group: groupId } = await searchParams
-  const user = await getCurrentUser()
+  const user = await requireUser()
 
   const [today, groupData] = await Promise.all([
     getOrCreateTodayPractice(user.id, groupId),

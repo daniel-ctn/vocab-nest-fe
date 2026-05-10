@@ -13,14 +13,16 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
     sendResetPassword: async ({ user, url }) => {
-      // TODO: Configure email provider for production
-      // eslint-disable-next-line no-console
-      console.log(`Reset password link for ${user.email}: ${url}`)
+      // TODO: Integrate email provider (Resend, SendGrid, AWS SES)
+      // to send the reset link. The URL contains a one-time token.
+      // Do not log this URL in production.
+      void user
+      void url
     },
   },
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: [process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'],
+  trustedOrigins: [process.env.NEXT_PUBLIC_APP_URL!],
   plugins: [
     dash({
       apiKey: process.env.BETTER_AUTH_API_KEY,

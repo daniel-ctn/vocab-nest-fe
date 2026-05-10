@@ -7,7 +7,7 @@ import {
   ArrowRight,
   Plus,
 } from 'lucide-react'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import { getDashboardSummary } from '@/lib/data/dashboard'
 
 function StatCard({
@@ -43,7 +43,7 @@ function StatCard({
 }
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const stats = await getDashboardSummary(user.id)
   const hasDue = stats.dueToday > 0
 

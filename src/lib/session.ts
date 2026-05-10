@@ -6,8 +6,13 @@ export async function getCurrentUser() {
   const session = await auth.api.getSession({
     headers: await headers(),
   })
-  if (!session?.user) {
+  return session?.user ?? null
+}
+
+export async function requireUser() {
+  const user = await getCurrentUser()
+  if (!user) {
     redirect('/login')
   }
-  return session.user
+  return user
 }

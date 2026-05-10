@@ -16,16 +16,16 @@ export async function getDashboardSummary(userId: string) {
   todayEnd.setDate(todayEnd.getDate() + 1)
 
   const totalVocabulary = await db
-    .select()
+    .select({ count: sql<number>`count(*)` })
     .from(vocabularyEntries)
     .where(eq(vocabularyEntries.userId, userId))
-    .then((rows) => rows.length)
+    .then((rows) => Number(rows[0]?.count ?? 0))
 
   const totalGroups = await db
-    .select()
+    .select({ count: sql<number>`count(*)` })
     .from(groups)
     .where(eq(groups.userId, userId))
-    .then((rows) => rows.length)
+    .then((rows) => Number(rows[0]?.count ?? 0))
 
   // Count words due for review (nextReviewAt <= now)
   const dueToday = await db

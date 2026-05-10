@@ -6,7 +6,7 @@ import {
   TrendingUp,
   AlertTriangle,
 } from 'lucide-react'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import { getLearningStats } from '@/lib/data/stats'
 
 function StatCard({
@@ -34,7 +34,7 @@ function StatCard({
 }
 
 export default async function StatsPage() {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const stats = await getLearningStats(user.id)
 
   const totalMastery = stats.masteryDistribution.reduce(

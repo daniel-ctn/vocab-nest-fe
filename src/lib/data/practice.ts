@@ -78,18 +78,6 @@ export async function getOrCreateTodayPractice(
     .then((rows) => rows[0] ?? null)
 
   if (!session) {
-    const sessionId = crypto.randomUUID()
-
-    await db.insert(practiceSessions).values({
-      id: sessionId,
-      userId,
-      groupId: groupId ?? null,
-      date: today,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    })
-
     // Build query for vocabulary entries, optionally filtered by group
     let vocabQuery = db
       .select({ id: vocabularyEntries.id, term: vocabularyEntries.term })
@@ -117,15 +105,20 @@ export async function getOrCreateTodayPractice(
 
     const allVocab = await vocabQuery
 
-    const statsRows = await db
-      .select()
-      .from(vocabularyReviewStats)
-      .where(
-        inArray(
-          vocabularyReviewStats.vocabularyId,
-          allVocab.map((v) => v.id)
-        )
-      )
+    if (allVocab.length === 0) return null
+
+    const statsRows =
+      allVocab.length > 0
+        ? await db
+            .select()
+            .from(vocabularyReviewStats)
+            .where(
+              inArray(
+                vocabularyReviewStats.vocabularyId,
+                allVocab.map((v) => v.id)
+              )
+            )
+        : []
 
     const statsMap = new Map(statsRows.map((s) => [s.vocabularyId, s]))
 
@@ -166,17 +159,29 @@ export async function getOrCreateTodayPractice(
       return stats.nextReviewAt <= now
     })
 
-    if (dueVocab.length > 0) {
-      await db.insert(practiceItems).values(
-        dueVocab.map((v) => ({
-          id: crypto.randomUUID(),
-          practiceSessionId: sessionId,
-          vocabularyId: v.id,
-          prompt: v.term,
-          dueAt: now,
-        }))
-      )
-    }
+    if (dueVocab.length === 0) return null
+
+    const sessionId = crypto.randomUUID()
+
+    await db.insert(practiceSessions).values({
+      id: sessionId,
+      userId,
+      groupId: groupId ?? null,
+      date: today,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await db.insert(practiceItems).values(
+      dueVocab.map((v) => ({
+        id: crypto.randomUUID(),
+        practiceSessionId: sessionId,
+        vocabularyId: v.id,
+        prompt: v.term,
+        dueAt: now,
+      }))
+    )
 
     session = (await db
       .select()

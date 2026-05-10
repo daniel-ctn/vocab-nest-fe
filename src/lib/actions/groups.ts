@@ -4,15 +4,21 @@ import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { groups, vocabularyEntries, vocabularyGroups } from '@/lib/db/schema'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
+import { rateLimit } from '@/lib/rate-limit'
 import {
   CreateGroupRequestSchema,
   UpdateGroupRequestSchema,
 } from '@/lib/contracts'
 
 export async function createGroup(input: unknown) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = CreateGroupRequestSchema.parse(input)
+
+  const limit = rateLimit(`group:create:${user.id}`, 10, 60_000)
+  if (!limit.success) {
+    throw new Error('Rate limit exceeded. Please slow down.')
+  }
 
   const id = crypto.randomUUID()
   const now = new Date()
@@ -32,7 +38,7 @@ export async function createGroup(input: unknown) {
 }
 
 export async function updateGroup(id: string, input: unknown) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = UpdateGroupRequestSchema.parse(input)
 
   const owned = await db
@@ -56,7 +62,7 @@ export async function updateGroup(id: string, input: unknown) {
 }
 
 export async function deleteGroup(id: string) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
 
   const owned = await db
     .select({ id: groups.id })
@@ -78,7 +84,12 @@ export async function addVocabularyToGroup(
   vocabularyId: string,
   groupId: string
 ) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
+
+  const limit = rateLimit(`group:modify:${user.id}`, 30, 60_000)
+  if (!limit.success) {
+    throw new Error('Rate limit exceeded. Please slow down.')
+  }
 
   const vocab = await db
     .select({ id: vocabularyEntries.id })
@@ -116,7 +127,7 @@ export async function removeVocabularyFromGroup(
   vocabularyId: string,
   groupId: string
 ) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
 
   const vocab = await db
     .select({ id: vocabularyEntries.id })

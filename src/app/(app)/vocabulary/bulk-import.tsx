@@ -89,6 +89,7 @@ export function BulkImport() {
       <textarea
         rows={8}
         value={raw}
+        maxLength={10_000}
         onChange={(e) => setRaw(e.target.value)}
         placeholder={`serendipity | a happy accident | english, advanced\nephemeral | lasting for a very short time | english\nmellifluous | (of a voice or words) sweet or musical | english`}
         className="w-full px-3.5 py-2.5 rounded-lg bg-cream border border-border text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all resize-none font-mono"

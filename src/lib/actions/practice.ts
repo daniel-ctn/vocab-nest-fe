@@ -1,6 +1,6 @@
 'use server'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import {
@@ -9,7 +9,7 @@ import {
   userStats,
   vocabularyReviewStats,
 } from '@/lib/db/schema'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import { PracticeReviewRequestSchema } from '@/lib/contracts'
 import { calculateNextReview } from '@/lib/data/practice'
 
@@ -18,7 +18,7 @@ export async function reviewPracticeItem(
   itemId: string,
   input: unknown
 ) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = PracticeReviewRequestSchema.parse(input)
 
   const session = await db
@@ -103,7 +103,7 @@ export async function reviewPracticeItem(
 }
 
 export async function completePractice(practiceId: string) {
-  const user = await getCurrentUser()
+  const user = await requireUser()
 
   const session = await db
     .select()
@@ -133,24 +133,31 @@ export async function completePractice(practiceId: string) {
     .set({ status: 'completed', updatedAt: now })
     .where(eq(practiceSessions.id, practiceId))
 
-  const reviewedCount = await db
-    .select()
+  const reviewedCountResult = await db
+    .select({ count: sql<number>`count(*)` })
     .from(practiceItems)
-    .where(eq(practiceItems.practiceSessionId, practiceId))
-    .then((rows) => rows.filter((r) => r.reviewedAt !== null).length)
+    .where(
+      and(
+        eq(practiceItems.practiceSessionId, practiceId),
+        sql`${practiceItems.reviewedAt} is not null`
+      )
+    )
+    .then((rows) => Number(rows[0]?.count ?? 0))
 
-  if (reviewedCount > 0) {
-    const stats = await db
-      .select()
-      .from(userStats)
-      .where(eq(userStats.userId, user.id))
-      .limit(1)
-      .then((rows) => rows[0])
+  if (reviewedCountResult > 0) {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().slice(0, 10)
 
-    if (stats) {
-      const yesterday = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      const yesterdayStr = yesterday.toISOString().slice(0, 10)
+    await db.transaction(async (tx) => {
+      const stats = await tx
+        .select()
+        .from(userStats)
+        .where(eq(userStats.userId, user.id))
+        .limit(1)
+        .then((rows) => rows[0])
+
+      if (!stats) return
 
       let streak = stats.streakDays
       if (stats.lastPracticeDate === yesterdayStr) {
@@ -159,11 +166,11 @@ export async function completePractice(practiceId: string) {
         streak = 1
       }
 
-      await db
+      await tx
         .update(userStats)
         .set({ streakDays: streak, lastPracticeDate: today })
         .where(eq(userStats.userId, user.id))
-    }
+    })
   }
 
   revalidatePath('/practice')

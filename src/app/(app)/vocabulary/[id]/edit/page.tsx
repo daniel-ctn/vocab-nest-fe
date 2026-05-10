@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getCurrentUser } from '@/lib/session'
+import { requireUser } from '@/lib/session'
 import { getVocabularyWithGroups } from '@/lib/data/vocabulary'
 import { listGroups } from '@/lib/data/groups'
 import { VocabularyForm } from '../../new/vocabulary-form'
@@ -12,7 +12,7 @@ export default async function VocabularyEditPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const user = await getCurrentUser()
+  const user = await requireUser()
   const data = await getVocabularyWithGroups(id, user.id)
   if (!data) {
     redirect('/vocabulary')

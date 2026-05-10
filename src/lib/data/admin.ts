@@ -7,8 +7,8 @@ import {
   user,
   userStats,
   vocabularyEntries,
-  vocabularyReviewStats,
 } from '@/lib/db/schema'
+import { isAdmin } from '@/lib/admin'
 
 export type AdminStats = {
   totalUsers: number
@@ -27,6 +27,10 @@ export type AdminStats = {
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
+  const admin = await isAdmin()
+  if (!admin) {
+    throw new Error('Unauthorized')
+  }
   const totalUsers = await db
     .select({ count: sql<number>`count(*)` })
     .from(user)
