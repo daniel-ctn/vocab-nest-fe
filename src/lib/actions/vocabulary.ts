@@ -1,9 +1,9 @@
 'use server'
 
-import { and, eq, ilike } from 'drizzle-orm'
+import { and, eq, ilike, or, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
-import { vocabularyEntries } from '@/lib/db/schema'
+import { vocabularyEntries, vocabularyReviewStats } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/session'
 import {
   CreateVocabularyRequestSchema,
@@ -30,6 +30,18 @@ export async function createVocabulary(
     partOfSpeech: data.partOfSpeech ?? null,
     examples: data.examples ?? [],
     tags: data.tags ?? [],
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  await db.insert(vocabularyReviewStats).values({
+    vocabularyId: id,
+    nextReviewAt: now,
+    intervalDays: 1,
+    easeFactor: 250,
+    consecutiveCorrect: 0,
+    totalReviews: 0,
+    totalCorrect: 0,
     createdAt: now,
     updatedAt: now,
   })
@@ -100,9 +112,15 @@ export async function searchVocabulary(
   const user = await getCurrentUser()
   const data = VocabularySearchRequestSchema.parse(input)
 
+  const q = `%${data.query}%`
+
   const conditions = [
     eq(vocabularyEntries.userId, user.id),
-    ilike(vocabularyEntries.term, `%${data.query}%`),
+    or(
+      ilike(vocabularyEntries.term, q),
+      ilike(vocabularyEntries.definition, q),
+      sql`${vocabularyEntries.tags}::text ilike ${q}`
+    ),
   ]
   if (data.language) {
     conditions.push(eq(vocabularyEntries.language, data.language))
@@ -110,21 +128,92 @@ export async function searchVocabulary(
 
   const rows = await db
     .select({
+      id: vocabularyEntries.id,
       term: vocabularyEntries.term,
       definition: vocabularyEntries.definition,
       language: vocabularyEntries.language,
       partOfSpeech: vocabularyEntries.partOfSpeech,
       examples: vocabularyEntries.examples,
+      tags: vocabularyEntries.tags,
+      createdAt: vocabularyEntries.createdAt,
+      updatedAt: vocabularyEntries.updatedAt,
     })
     .from(vocabularyEntries)
     .where(and(...conditions))
     .limit(50)
 
   return rows.map((r) => ({
+    id: r.id,
     term: r.term,
     definition: r.definition,
     language: r.language ?? undefined,
     partOfSpeech: r.partOfSpeech ?? undefined,
     examples: r.examples ?? [],
+    tags: r.tags ?? [],
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
   }))
+}
+
+type BulkEntry = {
+  term: string
+  definition: string
+  tags?: string[]
+}
+
+export async function bulkCreateVocabulary(
+  entries: BulkEntry[]
+): Promise<{ created: number; failed: number }> {
+  const user = await getCurrentUser()
+  const now = new Date()
+
+  let created = 0
+  let failed = 0
+
+  for (const entry of entries) {
+    if (!entry.term.trim() || !entry.definition.trim()) {
+      failed++
+      continue
+    }
+
+    try {
+      const id = crypto.randomUUID()
+
+      await db.insert(vocabularyEntries).values({
+        id,
+        userId: user.id,
+        term: entry.term.trim(),
+        definition: entry.definition.trim(),
+        language: null,
+        partOfSpeech: null,
+        examples: [],
+        tags: entry.tags ?? [],
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      await db.insert(vocabularyReviewStats).values({
+        vocabularyId: id,
+        nextReviewAt: now,
+        intervalDays: 1,
+        easeFactor: 250,
+        consecutiveCorrect: 0,
+        totalReviews: 0,
+        totalCorrect: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      created++
+    } catch {
+      failed++
+    }
+  }
+
+  if (created > 0) {
+    revalidatePath('/vocabulary')
+    revalidatePath('/dashboard')
+  }
+
+  return { created, failed }
 }

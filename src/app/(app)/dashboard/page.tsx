@@ -100,6 +100,35 @@ export default async function DashboardPage() {
         />
       </div>
 
+      <div className="p-5 rounded-2xl bg-surface border border-border">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-semibold text-ink">
+            Daily goal
+          </h2>
+          <span className="text-sm text-ink-secondary">
+            {Math.min(stats.reviewedToday, stats.dailyGoal)} / {stats.dailyGoal}{' '}
+            words
+          </span>
+        </div>
+        <div className="h-2.5 rounded-full bg-border-subtle overflow-hidden">
+          <div
+            className="h-full bg-accent transition-all duration-500 rounded-full"
+            style={{
+              width: `${Math.min(100, (stats.reviewedToday / stats.dailyGoal) * 100)}%`,
+            }}
+          />
+        </div>
+        {stats.reviewedToday >= stats.dailyGoal ? (
+          <p className="text-sm text-success mt-2">
+            Daily goal reached! Great work.
+          </p>
+        ) : (
+          <p className="text-sm text-ink-secondary mt-2">
+            {stats.dailyGoal - stats.reviewedToday} more to reach your daily goal.
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Link
           href="/vocabulary/new"

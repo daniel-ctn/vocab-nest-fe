@@ -1,9 +1,11 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
   practiceItems,
   practiceSessions,
   vocabularyEntries,
+  vocabularyGroups,
+  vocabularyReviewStats,
 } from '@/lib/db/schema'
 import type { PracticeSession } from '@/lib/contracts'
 
@@ -12,40 +14,157 @@ export type TodayPractice = {
   definitions: Record<string, string>
 }
 
+function calculateNextReview(
+  remembered: boolean,
+  current: {
+    intervalDays: number
+    easeFactor: number
+    consecutiveCorrect: number
+  }
+) {
+  let interval = current.intervalDays
+  let ease = current.easeFactor
+  let streak = current.consecutiveCorrect
+
+  if (remembered) {
+    streak += 1
+    if (streak === 1) {
+      interval = 1
+    } else if (streak === 2) {
+      interval = 3
+    } else {
+      interval = Math.max(1, Math.round(interval * (ease / 100)))
+    }
+    ease = Math.min(250, ease + 10)
+  } else {
+    streak = 0
+    interval = 1
+    ease = Math.max(130, ease - 20)
+  }
+
+  return {
+    intervalDays: interval,
+    easeFactor: ease,
+    consecutiveCorrect: streak,
+  }
+}
+
+export { calculateNextReview }
+
 export async function getOrCreateTodayPractice(
-  userId: string
+  userId: string,
+  groupId?: string
 ): Promise<TodayPractice | null> {
   const today = new Date().toISOString().slice(0, 10)
+  const now = new Date()
+
+  const sessionWhere = groupId
+    ? and(
+        eq(practiceSessions.userId, userId),
+        eq(practiceSessions.date, today),
+        eq(practiceSessions.groupId, groupId)
+      )
+    : and(
+        eq(practiceSessions.userId, userId),
+        eq(practiceSessions.date, today),
+        isNull(practiceSessions.groupId)
+      )
 
   let session = await db
     .select()
     .from(practiceSessions)
-    .where(
-      and(eq(practiceSessions.userId, userId), eq(practiceSessions.date, today))
-    )
+    .where(sessionWhere)
     .limit(1)
     .then((rows) => rows[0] ?? null)
 
   if (!session) {
     const sessionId = crypto.randomUUID()
-    const now = new Date()
 
     await db.insert(practiceSessions).values({
       id: sessionId,
       userId,
+      groupId: groupId ?? null,
       date: today,
       status: 'pending',
       createdAt: now,
       updatedAt: now,
     })
 
-    const dueVocab = await db
-      .select({
-        id: vocabularyEntries.id,
-        term: vocabularyEntries.term,
-      })
+    // Build query for vocabulary entries, optionally filtered by group
+    let vocabQuery = db
+      .select({ id: vocabularyEntries.id, term: vocabularyEntries.term })
       .from(vocabularyEntries)
       .where(eq(vocabularyEntries.userId, userId))
+
+    if (groupId) {
+      vocabQuery = db
+        .select({
+          id: vocabularyEntries.id,
+          term: vocabularyEntries.term,
+        })
+        .from(vocabularyEntries)
+        .innerJoin(
+          vocabularyGroups,
+          eq(vocabularyEntries.id, vocabularyGroups.vocabularyId)
+        )
+        .where(
+          and(
+            eq(vocabularyEntries.userId, userId),
+            eq(vocabularyGroups.groupId, groupId)
+          )
+        )
+    }
+
+    const allVocab = await vocabQuery
+
+    const statsRows = await db
+      .select()
+      .from(vocabularyReviewStats)
+      .where(
+        inArray(
+          vocabularyReviewStats.vocabularyId,
+          allVocab.map((v) => v.id)
+        )
+      )
+
+    const statsMap = new Map(statsRows.map((s) => [s.vocabularyId, s]))
+
+    // Create missing stats rows for legacy entries
+    const missingStats = allVocab.filter((v) => !statsMap.has(v.id))
+    if (missingStats.length > 0) {
+      await db.insert(vocabularyReviewStats).values(
+        missingStats.map((v) => ({
+          vocabularyId: v.id,
+          nextReviewAt: now,
+          intervalDays: 1,
+          easeFactor: 250,
+          consecutiveCorrect: 0,
+          totalReviews: 0,
+          totalCorrect: 0,
+          createdAt: now,
+          updatedAt: now,
+        }))
+      )
+      for (const v of missingStats) {
+        statsMap.set(v.id, {
+          vocabularyId: v.id,
+          nextReviewAt: now,
+          intervalDays: 1,
+          easeFactor: 250,
+          consecutiveCorrect: 0,
+          totalReviews: 0,
+          totalCorrect: 0,
+          createdAt: now,
+          updatedAt: now,
+        })
+      }
+    }
+
+    const dueVocab = allVocab.filter((v) => {
+      const stats = statsMap.get(v.id)
+      if (!stats) return false
+      return stats.nextReviewAt <= now
+    })
 
     if (dueVocab.length > 0) {
       await db.insert(practiceItems).values(

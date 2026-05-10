@@ -20,11 +20,15 @@ export const VocabularySearchRequestSchema = z.object({
 })
 
 export const VocabularySearchResultSchema = z.object({
+  id: IdSchema,
   term: z.string().min(1),
   definition: z.string().min(1),
   language: z.string().min(2).optional(),
   partOfSpeech: z.string().min(1).optional(),
   examples: z.array(z.string().min(1)).default([]),
+  tags: z.array(z.string().min(1)).default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 })
 
 export const CreateVocabularyRequestSchema = z.object({

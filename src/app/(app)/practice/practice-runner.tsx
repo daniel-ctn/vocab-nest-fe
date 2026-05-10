@@ -2,8 +2,16 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Check, X, PartyPopper, RotateCcw } from 'lucide-react'
+import {
+  Loader2,
+  Check,
+  X,
+  PartyPopper,
+  RotateCcw,
+  Volume2,
+} from 'lucide-react'
 import { completePractice, reviewPracticeItem } from '@/lib/actions/practice'
+import { SpeakButton } from '@/components/speak-button'
 import type { PracticeSession } from '@/lib/contracts'
 
 export function PracticeRunner({
@@ -97,9 +105,12 @@ export function PracticeRunner({
         <div className="text-sm text-ink-secondary mb-4 uppercase tracking-wide font-medium">
           Do you remember this word?
         </div>
-        <h2 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-6">
-          {item.term}
-        </h2>
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <h2 className="font-display text-3xl sm:text-4xl font-semibold text-ink">
+            {item.term}
+          </h2>
+          <SpeakButton text={item.term} />
+        </div>
 
         {!revealed ? (
           <button

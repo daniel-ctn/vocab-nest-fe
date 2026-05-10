@@ -11,26 +11,18 @@ import {
   MoreHorizontal,
   Trash2,
   Pencil,
+  BookOpen,
   X,
+  Filter,
 } from 'lucide-react'
 import { deleteVocabulary, searchVocabulary } from '@/lib/actions/vocabulary'
-import type { VocabularyEntry, VocabularySearchResult } from '@/lib/contracts'
-
-type CardEntry = {
-  id: string
-  term: string
-  definition: string
-  language?: string
-  partOfSpeech?: string
-  tags: string[]
-  isSearchResult: boolean
-}
+import type { VocabularyEntry } from '@/lib/contracts'
 
 function VocabCard({
   entry,
   onDelete,
 }: {
-  entry: CardEntry
+  entry: VocabularyEntry
   onDelete: (id: string) => void
 }) {
   const router = useRouter()
@@ -40,9 +32,7 @@ function VocabCard({
     <div className="group relative p-4 rounded-xl bg-surface border border-border hover:border-accent/30 transition-colors">
       <div className="flex items-start justify-between gap-3">
         <button
-          onClick={() => {
-            if (!entry.isSearchResult) router.push(`/vocabulary/${entry.id}`)
-          }}
+          onClick={() => router.push(`/vocabulary/${entry.id}`)}
           className="text-left flex-1 min-w-0"
         >
           <h3 className="font-display text-lg font-semibold text-ink truncate">
@@ -52,46 +42,54 @@ function VocabCard({
             {entry.definition}
           </p>
         </button>
-        {!entry.isSearchResult && (
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="p-1.5 rounded-md text-ink-tertiary hover:text-ink hover:bg-border-subtle transition-colors"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setMenuOpen(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 w-36 rounded-lg bg-surface border border-border shadow-lg z-20 overflow-hidden">
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false)
-                      router.push(`/vocabulary/${entry.id}`)
-                    }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-ink hover:bg-border-subtle"
-                  >
-                    <Pencil size={14} />
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false)
-                      onDelete(entry.id)
-                    }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-error hover:bg-error-subtle"
-                  >
-                    <Trash2 size={14} />
-                    Delete
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="p-1.5 rounded-md text-ink-tertiary hover:text-ink hover:bg-border-subtle transition-colors"
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          {menuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setMenuOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 w-36 rounded-lg bg-surface border border-border shadow-lg z-20 overflow-hidden">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    router.push(`/vocabulary/${entry.id}`)
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-ink hover:bg-border-subtle"
+                >
+                  <BookOpen size={14} />
+                  View
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    router.push(`/vocabulary/${entry.id}/edit`)
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-ink hover:bg-border-subtle"
+                >
+                  <Pencil size={14} />
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onDelete(entry.id)
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-error hover:bg-error-subtle"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -106,50 +104,33 @@ function VocabCard({
           </span>
         )}
         {entry.tags.slice(0, 3).map((tag) => (
-          <span
+          <Link
             key={tag}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-subtle text-xs font-medium text-accent"
+            href={`/vocabulary?tag=${encodeURIComponent(tag)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-subtle text-xs font-medium text-accent hover:bg-accent/10 transition-colors"
           >
             <Tag size={10} />
             {tag}
-          </span>
+          </Link>
         ))}
       </div>
     </div>
   )
 }
 
-function entryToCard(entry: VocabularyEntry): CardEntry {
-  return {
-    id: entry.id,
-    term: entry.term,
-    definition: entry.definition,
-    language: entry.language,
-    partOfSpeech: entry.partOfSpeech,
-    tags: entry.tags,
-    isSearchResult: false,
-  }
-}
-
-function searchResultToCard(
-  result: VocabularySearchResult,
-  index: number
-): CardEntry {
-  return {
-    id: `search-${index}`,
-    term: result.term,
-    definition: result.definition,
-    language: result.language,
-    partOfSpeech: result.partOfSpeech,
-    tags: [],
-    isSearchResult: true,
-  }
-}
-
-export function VocabularyList({ entries }: { entries: VocabularyEntry[] }) {
+export function VocabularyList({
+  entries,
+  activeTag,
+}: {
+  entries: VocabularyEntry[]
+  activeTag?: string
+}) {
   const router = useRouter()
   const [query, setQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<CardEntry[] | null>(null)
+  const [searchResults, setSearchResults] = useState<VocabularyEntry[] | null>(
+    null
+  )
   const [searching, setSearching] = useState(false)
   const [, startTransition] = useTransition()
 
@@ -162,7 +143,7 @@ export function VocabularyList({ entries }: { entries: VocabularyEntry[] }) {
       setSearching(true)
       try {
         const results = await searchVocabulary({ query })
-        setSearchResults(results.map(searchResultToCard))
+        setSearchResults(results)
       } catch {
         setSearchResults([])
       } finally {
@@ -184,7 +165,7 @@ export function VocabularyList({ entries }: { entries: VocabularyEntry[] }) {
     })
   }
 
-  const displayed: CardEntry[] = searchResults ?? entries.map(entryToCard)
+  const displayed = searchResults ?? entries
 
   return (
     <div className="space-y-6">
@@ -215,7 +196,7 @@ export function VocabularyList({ entries }: { entries: VocabularyEntry[] }) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search words..."
+          placeholder="Search words, definitions, or tags..."
           className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-surface border border-border text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
         />
         {query && !searching && (
@@ -233,6 +214,27 @@ export function VocabularyList({ entries }: { entries: VocabularyEntry[] }) {
           />
         )}
       </div>
+
+      {activeTag && (
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-subtle text-sm text-accent font-medium">
+            <Filter size={12} />
+            {activeTag}
+          </div>
+          <Link
+            href="/vocabulary"
+            className="text-sm text-ink-secondary hover:text-ink transition-colors"
+          >
+            Clear filter
+          </Link>
+        </div>
+      )}
+
+      {searchResults && (
+        <p className="text-sm text-ink-secondary">
+          {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for &ldquo;{query}&rdquo;
+        </p>
+      )}
 
       {displayed.length === 0 ? (
         <div className="text-center py-20">

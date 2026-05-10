@@ -1,14 +1,21 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, BookOpen, Tag } from 'lucide-react'
+import { ArrowLeft, BookOpen, BrainCircuit, Tag } from 'lucide-react'
 import { getCurrentUser } from '@/lib/session'
-import { getGroupWithVocabulary } from '@/lib/data/groups'
+import {
+  getGroupWithVocabulary,
+  listVocabularyNotInGroup,
+} from '@/lib/data/groups'
 import { DeleteGroupButton } from './delete-group-button'
+import { AddWordsToGroup } from './add-words'
 import type { VocabularyEntry } from '@/lib/contracts'
 
 function VocabRow({ entry }: { entry: VocabularyEntry }) {
   return (
-    <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-surface border border-border hover:border-accent/30 transition-colors">
+    <Link
+      href={`/vocabulary/${entry.id}`}
+      className="flex items-start justify-between gap-4 p-4 rounded-xl bg-surface border border-border hover:border-accent/30 transition-colors"
+    >
       <div className="min-w-0">
         <h3 className="font-display text-base font-semibold text-ink truncate">
           {entry.term}
@@ -23,17 +30,19 @@ function VocabRow({ entry }: { entry: VocabularyEntry }) {
             </span>
           )}
           {entry.tags.slice(0, 3).map((tag) => (
-            <span
+            <Link
               key={tag}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-subtle text-xs font-medium text-accent"
+              href={`/vocabulary?tag=${encodeURIComponent(tag)}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-subtle text-xs font-medium text-accent hover:bg-accent/10 transition-colors"
             >
               <Tag size={10} />
               {tag}
-            </span>
+            </Link>
           ))}
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -50,6 +59,7 @@ export default async function GroupDetailPage({
   }
 
   const { group, items } = data
+  const availableWords = await listVocabularyNotInGroup(id, user.id)
 
   return (
     <div className="space-y-6">
@@ -74,8 +84,21 @@ export default async function GroupDetailPage({
             {items.length} word{items.length !== 1 ? 's' : ''}
           </div>
         </div>
-        <DeleteGroupButton id={group.id} />
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/practice?group=${group.id}`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
+          >
+            <BrainCircuit size={16} />
+            Practice
+          </Link>
+          <DeleteGroupButton id={group.id} />
+        </div>
       </div>
+
+      {availableWords.length > 0 && (
+        <AddWordsToGroup groupId={group.id} words={availableWords} />
+      )}
 
       {items.length === 0 ? (
         <div className="text-center py-16">

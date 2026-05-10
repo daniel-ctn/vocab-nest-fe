@@ -3,9 +3,15 @@
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
-import { practiceItems, practiceSessions, userStats } from '@/lib/db/schema'
+import {
+  practiceItems,
+  practiceSessions,
+  userStats,
+  vocabularyReviewStats,
+} from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/session'
 import { PracticeReviewRequestSchema } from '@/lib/contracts'
+import { calculateNextReview } from '@/lib/data/practice'
 
 export async function reviewPracticeItem(
   practiceId: string,
@@ -32,7 +38,7 @@ export async function reviewPracticeItem(
   }
 
   const item = await db
-    .select({ id: practiceItems.id })
+    .select({ id: practiceItems.id, vocabularyId: practiceItems.vocabularyId })
     .from(practiceItems)
     .where(
       and(
@@ -62,6 +68,38 @@ export async function reviewPracticeItem(
     .update(practiceSessions)
     .set({ status: 'in_progress', updatedAt: now })
     .where(eq(practiceSessions.id, practiceId))
+
+  // Apply spaced repetition algorithm
+  const statsRow = await db
+    .select()
+    .from(vocabularyReviewStats)
+    .where(eq(vocabularyReviewStats.vocabularyId, item.vocabularyId))
+    .limit(1)
+    .then((rows) => rows[0])
+
+  if (statsRow) {
+    const next = calculateNextReview(data.remembered, {
+      intervalDays: statsRow.intervalDays,
+      easeFactor: statsRow.easeFactor,
+      consecutiveCorrect: statsRow.consecutiveCorrect,
+    })
+
+    const nextReviewAt = new Date(now)
+    nextReviewAt.setDate(nextReviewAt.getDate() + next.intervalDays)
+
+    await db
+      .update(vocabularyReviewStats)
+      .set({
+        nextReviewAt,
+        intervalDays: next.intervalDays,
+        easeFactor: next.easeFactor,
+        consecutiveCorrect: next.consecutiveCorrect,
+        totalReviews: statsRow.totalReviews + 1,
+        totalCorrect: statsRow.totalCorrect + (data.remembered ? 1 : 0),
+        updatedAt: now,
+      })
+      .where(eq(vocabularyReviewStats.vocabularyId, item.vocabularyId))
+  }
 }
 
 export async function completePractice(practiceId: string) {
@@ -130,4 +168,7 @@ export async function completePractice(practiceId: string) {
 
   revalidatePath('/practice')
   revalidatePath('/dashboard')
+  if (session.groupId) {
+    revalidatePath(`/practice?group=${session.groupId}`)
+  }
 }

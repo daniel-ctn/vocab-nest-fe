@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, notInArray, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { groups, vocabularyEntries, vocabularyGroups } from '@/lib/db/schema'
 import type { Group, VocabularyEntry } from '@/lib/contracts'
@@ -86,4 +86,66 @@ export async function getGroupWithVocabulary(
     },
     items,
   }
+}
+
+export async function listVocabularyNotInGroup(
+  groupId: string,
+  userId: string
+): Promise<VocabularyEntry[]> {
+  const groupCheck = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.userId, userId)))
+    .limit(1)
+
+  if (groupCheck.length === 0) return []
+
+  const linkedIds = await db
+    .select({ vocabularyId: vocabularyGroups.vocabularyId })
+    .from(vocabularyGroups)
+    .where(eq(vocabularyGroups.groupId, groupId))
+
+  const linkedIdSet = new Set(linkedIds.map((r) => r.vocabularyId))
+
+  if (linkedIdSet.size === 0) {
+    const rows = await db
+      .select()
+      .from(vocabularyEntries)
+      .where(eq(vocabularyEntries.userId, userId))
+      .orderBy(vocabularyEntries.term)
+    return rows.map((v) => ({
+      id: v.id,
+      term: v.term,
+      definition: v.definition,
+      language: v.language ?? undefined,
+      partOfSpeech: v.partOfSpeech ?? undefined,
+      examples: v.examples,
+      tags: v.tags,
+      createdAt: v.createdAt.toISOString(),
+      updatedAt: v.updatedAt.toISOString(),
+    }))
+  }
+
+  const rows = await db
+    .select()
+    .from(vocabularyEntries)
+    .where(
+      and(
+        eq(vocabularyEntries.userId, userId),
+        notInArray(vocabularyEntries.id, Array.from(linkedIdSet))
+      )
+    )
+    .orderBy(vocabularyEntries.term)
+
+  return rows.map((v) => ({
+    id: v.id,
+    term: v.term,
+    definition: v.definition,
+    language: v.language ?? undefined,
+    partOfSpeech: v.partOfSpeech ?? undefined,
+    examples: v.examples,
+    tags: v.tags,
+    createdAt: v.createdAt.toISOString(),
+    updatedAt: v.updatedAt.toISOString(),
+  }))
 }

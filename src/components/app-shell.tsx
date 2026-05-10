@@ -7,22 +7,28 @@ import {
   BookOpen,
   FolderOpen,
   BrainCircuit,
+  BarChart3,
   LogOut,
   Feather,
+  Shield,
 } from 'lucide-react'
 import { signOut } from '@/lib/auth-client'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/cn'
 
-const navItems = [
+const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/vocabulary', label: 'Vocabulary', icon: BookOpen },
   { href: '/groups', label: 'Groups', icon: FolderOpen },
   { href: '/practice', label: 'Practice', icon: BrainCircuit },
+  { href: '/stats', label: 'Stats', icon: BarChart3 },
 ]
 
-export function Sidebar() {
+export function Sidebar({ isAdmin }: { isAdmin?: boolean }) {
   const pathname = usePathname()
+  const navItems = isAdmin
+    ? [...baseNavItems, { href: '/admin', label: 'Admin', icon: Shield }]
+    : baseNavItems
 
   return (
     <aside className="hidden lg:flex flex-col w-64 h-dvh sticky top-0 border-r border-border bg-surface">
@@ -70,8 +76,11 @@ export function Sidebar() {
   )
 }
 
-export function MobileNav() {
+export function MobileNav({ isAdmin }: { isAdmin?: boolean }) {
   const pathname = usePathname()
+  const navItems = isAdmin
+    ? [...baseNavItems, { href: '/admin', label: 'Admin', icon: Shield }]
+    : baseNavItems
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-surface border-t border-border">
@@ -97,10 +106,16 @@ export function MobileNav() {
   )
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  isAdmin,
+}: {
+  children: React.ReactNode
+  isAdmin?: boolean
+}) {
   return (
     <div className="flex min-h-dvh bg-cream">
-      <Sidebar />
+      <Sidebar isAdmin={isAdmin} />
       <div className="flex-1 flex flex-col min-w-0">
         <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-surface sticky top-0 z-40">
           <div className="flex items-center gap-2.5">
@@ -111,13 +126,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Vocab Nest
             </span>
           </div>
-          <ThemeToggle className="p-2 rounded-lg text-ink-secondary hover:bg-border-subtle hover:text-ink transition-colors" />
+          <div className="flex items-center gap-1">
+            <ThemeToggle className="p-2 rounded-lg text-ink-secondary hover:bg-border-subtle hover:text-ink transition-colors" />
+            <button
+              onClick={() => signOut()}
+              className="p-2 rounded-lg text-ink-secondary hover:bg-border-subtle hover:text-ink transition-colors"
+              aria-label="Sign out"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 max-w-5xl mx-auto w-full">
           {children}
         </main>
       </div>
-      <MobileNav />
+      <MobileNav isAdmin={isAdmin} />
     </div>
   )
 }

@@ -104,6 +104,9 @@ export const practiceSessions = pgTable('practice_sessions', {
   userId: text('user_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
+  groupId: text('group_id').references(() => groups.id, {
+    onDelete: 'cascade',
+  }),
   date: text('date').notNull(),
   status: text('status').notNull().default('pending'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -131,4 +134,19 @@ export const userStats = pgTable('user_stats', {
     .references(() => user.id, { onDelete: 'cascade' }),
   streakDays: integer('streak_days').notNull().default(0),
   lastPracticeDate: text('last_practice_date'),
+  dailyGoal: integer('daily_goal').notNull().default(10),
+})
+
+export const vocabularyReviewStats = pgTable('vocabulary_review_stats', {
+  vocabularyId: text('vocabulary_id')
+    .primaryKey()
+    .references(() => vocabularyEntries.id, { onDelete: 'cascade' }),
+  nextReviewAt: timestamp('next_review_at').notNull().defaultNow(),
+  intervalDays: integer('interval_days').notNull().default(1),
+  easeFactor: integer('ease_factor').notNull().default(250), // stored as hundredths (2.50 = 250)
+  consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
+  totalReviews: integer('total_reviews').notNull().default(0),
+  totalCorrect: integer('total_correct').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })

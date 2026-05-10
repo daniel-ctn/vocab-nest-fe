@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Loader2, MoreHorizontal, Trash2, BookOpen } from 'lucide-react'
+import {
+  Plus,
+  Loader2,
+  MoreHorizontal,
+  Trash2,
+  BookOpen,
+  BrainCircuit,
+} from 'lucide-react'
 import { createGroup, deleteGroup } from '@/lib/actions/groups'
 import type { CreateGroupRequest, Group } from '@/lib/contracts'
 
@@ -55,6 +62,16 @@ function GroupCard({
                 >
                   <BookOpen size={14} />
                   View
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    router.push(`/practice?group=${group.id}`)
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-ink hover:bg-border-subtle"
+                >
+                  <BrainCircuit size={14} />
+                  Practice
                 </button>
                 <button
                   onClick={() => {

@@ -14,6 +14,8 @@
   --color-accent-subtle: #fdf2ee;
   --color-success: #2d6a4f;
   --color-success-subtle: #eaf4ef;
+  --color-warning: #d4a03c;
+  --color-warning-subtle: #fdf8ee;
   --color-error: #c0392b;
   --color-error-subtle: #fdecea;
   --color-border: #e8e4de;
@@ -31,6 +33,8 @@
   --color-accent-subtle: #3d2520;
   --color-success: #3d8b6a;
   --color-success-subtle: #1a3025;
+  --color-warning: #e0b050;
+  --color-warning-subtle: #3d3020;
   --color-error: #e74c3c;
   --color-error-subtle: #3d1f1b;
   --color-border: #333333;

@@ -3,7 +3,7 @@
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
-import { groups } from '@/lib/db/schema'
+import { groups, vocabularyEntries, vocabularyGroups } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/session'
 import {
   CreateGroupRequestSchema,
@@ -72,4 +72,84 @@ export async function deleteGroup(id: string) {
 
   revalidatePath('/groups')
   revalidatePath('/dashboard')
+}
+
+export async function addVocabularyToGroup(
+  vocabularyId: string,
+  groupId: string
+) {
+  const user = await getCurrentUser()
+
+  const vocab = await db
+    .select({ id: vocabularyEntries.id })
+    .from(vocabularyEntries)
+    .where(
+      and(
+        eq(vocabularyEntries.id, vocabularyId),
+        eq(vocabularyEntries.userId, user.id)
+      )
+    )
+    .limit(1)
+
+  const group = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.userId, user.id)))
+    .limit(1)
+
+  if (vocab.length === 0 || group.length === 0) {
+    throw new Error('Not found.')
+  }
+
+  await db
+    .insert(vocabularyGroups)
+    .values({ vocabularyId, groupId })
+    .onConflictDoNothing()
+
+  revalidatePath('/vocabulary')
+  revalidatePath(`/vocabulary/${vocabularyId}`)
+  revalidatePath('/groups')
+  revalidatePath(`/groups/${groupId}`)
+}
+
+export async function removeVocabularyFromGroup(
+  vocabularyId: string,
+  groupId: string
+) {
+  const user = await getCurrentUser()
+
+  const vocab = await db
+    .select({ id: vocabularyEntries.id })
+    .from(vocabularyEntries)
+    .where(
+      and(
+        eq(vocabularyEntries.id, vocabularyId),
+        eq(vocabularyEntries.userId, user.id)
+      )
+    )
+    .limit(1)
+
+  const group = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.userId, user.id)))
+    .limit(1)
+
+  if (vocab.length === 0 || group.length === 0) {
+    throw new Error('Not found.')
+  }
+
+  await db
+    .delete(vocabularyGroups)
+    .where(
+      and(
+        eq(vocabularyGroups.vocabularyId, vocabularyId),
+        eq(vocabularyGroups.groupId, groupId)
+      )
+    )
+
+  revalidatePath('/vocabulary')
+  revalidatePath(`/vocabulary/${vocabularyId}`)
+  revalidatePath('/groups')
+  revalidatePath(`/groups/${groupId}`)
 }

@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, lte } from 'drizzle-orm'
+import { and, eq, lte, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
   groups,
@@ -6,11 +6,14 @@ import {
   practiceSessions,
   userStats,
   vocabularyEntries,
+  vocabularyReviewStats,
 } from '@/lib/db/schema'
 
 export async function getDashboardSummary(userId: string) {
   const now = new Date()
-  const today = now.toISOString().slice(0, 10)
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const todayEnd = new Date(todayStart)
+  todayEnd.setDate(todayEnd.getDate() + 1)
 
   const totalVocabulary = await db
     .select()
@@ -24,44 +27,41 @@ export async function getDashboardSummary(userId: string) {
     .where(eq(groups.userId, userId))
     .then((rows) => rows.length)
 
-  const todaySession = await db
-    .select({ id: practiceSessions.id })
-    .from(practiceSessions)
-    .where(
-      and(eq(practiceSessions.userId, userId), eq(practiceSessions.date, today))
+  // Count words due for review (nextReviewAt <= now)
+  const dueToday = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(vocabularyReviewStats)
+    .innerJoin(
+      vocabularyEntries,
+      eq(vocabularyReviewStats.vocabularyId, vocabularyEntries.id)
     )
-    .limit(1)
-    .then((rows) => rows[0] ?? null)
-
-  let dueToday = 0
-  let reviewedToday = 0
-
-  if (todaySession) {
-    dueToday = await db
-      .select()
-      .from(practiceItems)
-      .where(
-        and(
-          eq(practiceItems.practiceSessionId, todaySession.id),
-          lte(practiceItems.dueAt, now)
-        )
+    .where(
+      and(
+        eq(vocabularyEntries.userId, userId),
+        lte(vocabularyReviewStats.nextReviewAt, now)
       )
-      .then((rows) => rows.length)
+    )
+    .then((rows) => Number(rows[0]?.count ?? 0))
 
-    reviewedToday = await db
-      .select()
-      .from(practiceItems)
-      .where(
-        and(
-          eq(practiceItems.practiceSessionId, todaySession.id),
-          isNotNull(practiceItems.reviewedAt)
-        )
+  // Count reviews done today
+  const reviewedToday = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(practiceItems)
+    .innerJoin(
+      practiceSessions,
+      eq(practiceItems.practiceSessionId, practiceSessions.id)
+    )
+    .where(
+      and(
+        eq(practiceSessions.userId, userId),
+        sql`${practiceItems.reviewedAt} >= ${todayStart}`,
+        sql`${practiceItems.reviewedAt} < ${todayEnd}`
       )
-      .then((rows) => rows.length)
-  }
+    )
+    .then((rows) => Number(rows[0]?.count ?? 0))
 
   const stats = await db
-    .select({ streakDays: userStats.streakDays })
+    .select({ streakDays: userStats.streakDays, dailyGoal: userStats.dailyGoal })
     .from(userStats)
     .where(eq(userStats.userId, userId))
     .limit(1)
@@ -73,5 +73,6 @@ export async function getDashboardSummary(userId: string) {
     dueToday,
     reviewedToday,
     streakDays: stats?.streakDays ?? 0,
+    dailyGoal: stats?.dailyGoal ?? 10,
   }
 }
