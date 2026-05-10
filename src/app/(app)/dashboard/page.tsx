@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -9,10 +6,9 @@ import {
   Flame,
   ArrowRight,
   Plus,
-  Loader2,
 } from "lucide-react";
-import { apiGet } from "@/lib/api-client";
-import type { DashboardSummaryResponse } from "@/lib/contracts";
+import { getCurrentUser } from "@/lib/session";
+import { getDashboardSummary } from "@/lib/data/dashboard";
 
 function StatCard({
   label,
@@ -44,33 +40,9 @@ function StatCard({
   );
 }
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardSummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiGet<DashboardSummaryResponse>("/api/dashboard/summary")
-      .then(setStats)
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-accent" size={24} />
-      </div>
-    );
-  }
-
-  if (!stats) {
-    return (
-      <div className="text-center py-20 text-ink-secondary">
-        Unable to load dashboard.
-      </div>
-    );
-  }
-
+export default async function DashboardPage() {
+  const user = await getCurrentUser();
+  const stats = await getDashboardSummary(user.id);
   const hasDue = stats.dueToday > 0;
 
   return (

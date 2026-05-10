@@ -69,8 +69,8 @@ export const vocabularyEntries = pgTable("vocabulary_entries", {
   definition: text("definition").notNull(),
   language: text("language"),
   partOfSpeech: text("part_of_speech"),
-  examples: jsonb("examples").notNull().default([]),
-  tags: jsonb("tags").notNull().default([]),
+  examples: jsonb("examples").$type<string[]>().notNull().default([]),
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

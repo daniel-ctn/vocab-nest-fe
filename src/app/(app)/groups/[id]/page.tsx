@@ -1,22 +1,12 @@
-"use client";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ArrowLeft, BookOpen, Tag } from "lucide-react";
+import { getCurrentUser } from "@/lib/session";
+import { getGroupWithVocabulary } from "@/lib/data/groups";
+import { DeleteGroupButton } from "./delete-group-button";
+import type { VocabularyEntry } from "@/lib/contracts";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Loader2,
-  BookOpen,
-  Tag,
-  Trash2,
-} from "lucide-react";
-import { apiDelete, apiGet } from "@/lib/api-client";
-import type { GroupVocabularyResponse, VocabularyEntry } from "@/lib/contracts";
-
-function VocabRow({
-  entry,
-}: {
-  entry: VocabularyEntry;
-}) {
+function VocabRow({ entry }: { entry: VocabularyEntry }) {
   return (
     <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-surface border border-border hover:border-accent/30 transition-colors">
       <div className="min-w-0">
@@ -47,90 +37,59 @@ function VocabRow({
   );
 }
 
-export default function GroupDetailPage({
+export default async function GroupDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const router = useRouter();
-  const [data, setData] = useState<GroupVocabularyResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    params.then(({ id }) => {
-      apiGet<GroupVocabularyResponse>(`/api/groups/${id}/vocabulary`)
-        .then(setData)
-        .catch(() => router.replace("/groups"))
-        .finally(() => setLoading(false));
-    });
-  }, [params, router]);
-
-  async function handleDeleteGroup() {
-    if (!data) return;
-    if (!confirm("Delete this group?")) return;
-    try {
-      await apiDelete(`/api/groups/${data.group.id}`);
-      router.push("/groups");
-    } catch {
-      alert("Failed to delete group");
-    }
+  const { id } = await params;
+  const user = await getCurrentUser();
+  const data = await getGroupWithVocabulary(id, user.id);
+  if (!data) {
+    redirect("/groups");
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-accent" size={24} />
-      </div>
-    );
-  }
-
-  if (!data) return null;
+  const { group, items } = data;
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={() => router.back()}
+      <Link
+        href="/groups"
         className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-ink transition-colors"
       >
         <ArrowLeft size={16} />
         Back to groups
-      </button>
+      </Link>
 
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold text-ink">
-            {data.group.name}
+            {group.name}
           </h1>
-          {data.group.description && (
-            <p className="text-ink-secondary mt-1">{data.group.description}</p>
+          {group.description && (
+            <p className="text-ink-secondary mt-1">{group.description}</p>
           )}
           <div className="mt-2 flex items-center gap-1.5 text-sm text-ink-secondary">
             <BookOpen size={14} />
-            {data.total} word{data.total !== 1 ? "s" : ""}
+            {items.length} word{items.length !== 1 ? "s" : ""}
           </div>
         </div>
-        <button
-          onClick={handleDeleteGroup}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-error-subtle text-error text-sm font-medium hover:bg-error/10 transition-colors"
-        >
-          <Trash2 size={14} />
-          Delete group
-        </button>
+        <DeleteGroupButton id={group.id} />
       </div>
 
-      {data.items.length === 0 ? (
+      {items.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-ink-secondary">No words in this group yet.</p>
-          <button
-            onClick={() => router.push("/vocabulary")}
+          <Link
+            href="/vocabulary"
             className="inline-flex items-center gap-2 mt-4 text-sm font-medium text-accent hover:underline"
           >
             Browse vocabulary
-          </button>
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">
-          {data.items.map((entry) => (
+          {items.map((entry) => (
             <VocabRow key={entry.id} entry={entry} />
           ))}
         </div>
