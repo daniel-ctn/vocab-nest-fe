@@ -6,12 +6,15 @@ import { db } from '@/lib/db'
 import { vocabularyEntries, vocabularyReviewStats } from '@/lib/db/schema'
 import { requireUser } from '@/lib/session'
 import { rateLimit } from '@/lib/rate-limit'
+import { isPro } from '@/lib/data/subscription'
 import {
   CreateVocabularyRequestSchema,
   UpdateVocabularyRequestSchema,
   VocabularySearchRequestSchema,
   type VocabularySearchResult,
 } from '@/lib/contracts'
+
+const FREE_WORD_LIMIT = 100
 
 export async function createVocabulary(
   input: unknown
@@ -22,6 +25,20 @@ export async function createVocabulary(
   const limit = rateLimit(`create:${user.id}`, 20, 60_000)
   if (!limit.success) {
     throw new Error('Rate limit exceeded. Please slow down.')
+  }
+
+  const pro = await isPro(user.id)
+  if (!pro) {
+    const count = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(vocabularyEntries)
+      .where(eq(vocabularyEntries.userId, user.id))
+      .then((rows) => Number(rows[0]?.count ?? 0))
+    if (count >= FREE_WORD_LIMIT) {
+      throw new Error(
+        'Free plan limit reached. Upgrade to Pro for unlimited vocabulary.'
+      )
+    }
   }
 
   const id = crypto.randomUUID()

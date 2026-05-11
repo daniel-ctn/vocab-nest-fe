@@ -1,15 +1,18 @@
 'use server'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { groups, vocabularyEntries, vocabularyGroups } from '@/lib/db/schema'
 import { requireUser } from '@/lib/session'
 import { rateLimit } from '@/lib/rate-limit'
+import { isPro } from '@/lib/data/subscription'
 import {
   CreateGroupRequestSchema,
   UpdateGroupRequestSchema,
 } from '@/lib/contracts'
+
+const FREE_GROUP_LIMIT = 3
 
 export async function createGroup(input: unknown) {
   const user = await requireUser()
@@ -18,6 +21,20 @@ export async function createGroup(input: unknown) {
   const limit = rateLimit(`group:create:${user.id}`, 10, 60_000)
   if (!limit.success) {
     throw new Error('Rate limit exceeded. Please slow down.')
+  }
+
+  const pro = await isPro(user.id)
+  if (!pro) {
+    const count = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(groups)
+      .where(eq(groups.userId, user.id))
+      .then((rows) => Number(rows[0]?.count ?? 0))
+    if (count >= FREE_GROUP_LIMIT) {
+      throw new Error(
+        'Free plan limit reached. Upgrade to Pro for unlimited groups.'
+      )
+    }
   }
 
   const id = crypto.randomUUID()

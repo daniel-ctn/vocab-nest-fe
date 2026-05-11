@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ArrowLeft, ArrowRight, BrainCircuit } from 'lucide-react'
 import { requireUser } from '@/lib/session'
+import { isPro } from '@/lib/data/subscription'
 import { getOrCreateTodayPractice } from '@/lib/data/practice'
 import { getGroupWithVocabulary } from '@/lib/data/groups'
 import { PracticeRunner } from './practice-runner'
@@ -12,6 +14,13 @@ export default async function PracticePage({
 }) {
   const { group: groupId } = await searchParams
   const user = await requireUser()
+
+  if (groupId) {
+    const pro = await isPro(user.id)
+    if (!pro) {
+      redirect('/upgrade')
+    }
+  }
 
   const [today, groupData] = await Promise.all([
     getOrCreateTodayPractice(user.id, groupId),

@@ -117,9 +117,13 @@ function VocabCard({
 export function VocabularyList({
   entries,
   activeTag,
+  atLimit,
+  isPro,
 }: {
   entries: VocabularyEntry[]
   activeTag?: string
+  atLimit?: boolean
+  isPro?: boolean
 }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
@@ -173,13 +177,27 @@ export function VocabularyList({
             {entries.length} word{entries.length !== 1 ? 's' : ''} collected
           </p>
         </div>
-        <Link
-          href="/vocabulary/new"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
-        >
-          <Plus size={16} />
-          Add word
-        </Link>
+        <div className="flex items-center gap-2">
+          {!isPro && (
+            <Link
+              href="/upgrade"
+              className="text-xs text-accent font-medium hover:underline"
+            >
+              Upgrade
+            </Link>
+          )}
+          <Link
+            href={atLimit ? '/upgrade' : '/vocabulary/new'}
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              atLimit
+                ? 'bg-border-subtle text-ink-secondary'
+                : 'bg-accent text-white hover:bg-accent-hover'
+            }`}
+          >
+            <Plus size={16} />
+            {atLimit ? 'At limit' : 'Add word'}
+          </Link>
+        </div>
       </div>
 
       <div className="relative">

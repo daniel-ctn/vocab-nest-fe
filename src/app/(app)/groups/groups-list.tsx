@@ -92,7 +92,15 @@ function GroupCard({
   )
 }
 
-export function GroupsList({ groups }: { groups: Group[] }) {
+export function GroupsList({
+  groups,
+  atLimit,
+  isPro,
+}: {
+  groups: Group[]
+  atLimit?: boolean
+  isPro?: boolean
+}) {
   const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [newName, setNewName] = useState('')
@@ -142,13 +150,33 @@ export function GroupsList({ groups }: { groups: Group[] }) {
             Organize your vocabulary into collections.
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
-        >
-          <Plus size={16} />
-          New group
-        </button>
+        <div className="flex items-center gap-2">
+          {!isPro && (
+            <Link
+              href="/upgrade"
+              className="text-xs text-accent font-medium hover:underline"
+            >
+              Upgrade
+            </Link>
+          )}
+          <button
+            onClick={() => {
+              if (atLimit) {
+                router.push('/upgrade')
+                return
+              }
+              setShowForm((v) => !v)
+            }}
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              atLimit
+                ? 'bg-border-subtle text-ink-secondary'
+                : 'bg-accent text-white hover:bg-accent-hover'
+            }`}
+          >
+            <Plus size={16} />
+            {atLimit ? 'At limit' : 'New group'}
+          </button>
+        </div>
       </div>
 
       {showForm && (

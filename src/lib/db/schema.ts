@@ -193,3 +193,20 @@ export const vocabularyReviewStats = pgTable(
     index('review_stats_next_review_idx').on(t.nextReviewAt),
   ]
 )
+
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    stripeCustomerId: text('stripe_customer_id').notNull(),
+    stripeSubscriptionId: text('stripe_subscription_id'),
+    stripePriceId: text('stripe_price_id'),
+    status: text('status').notNull().default('inactive'),
+    currentPeriodEnd: timestamp('current_period_end'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('subscriptions_user_idx').on(t.userId)]
+)

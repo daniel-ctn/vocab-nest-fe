@@ -8,6 +8,7 @@ import {
   FolderOpen,
   BrainCircuit,
   BarChart3,
+  Settings,
   LogOut,
   Feather,
   Shield,
@@ -23,6 +24,7 @@ const baseNavItems = [
   { href: '/groups', label: 'Groups', icon: FolderOpen },
   { href: '/practice', label: 'Practice', icon: BrainCircuit },
   { href: '/stats', label: 'Stats', icon: BarChart3 },
+  { href: '/settings/billing', label: 'Settings', icon: Settings },
 ]
 
 export function Sidebar({ isAdmin }: { isAdmin?: boolean }) {

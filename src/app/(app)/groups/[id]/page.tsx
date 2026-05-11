@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft, BookOpen, BrainCircuit, Tag } from 'lucide-react'
 import { requireUser } from '@/lib/session'
+import { isPro } from '@/lib/data/subscription'
 import {
   getGroupWithVocabulary,
   listVocabularyNotInGroup,
@@ -59,7 +60,10 @@ export default async function GroupDetailPage({
   }
 
   const { group, items } = data
-  const availableWords = await listVocabularyNotInGroup(id, user.id)
+  const [availableWords, pro] = await Promise.all([
+    listVocabularyNotInGroup(id, user.id),
+    isPro(user.id),
+  ])
 
   return (
     <div className="space-y-6">
@@ -85,13 +89,23 @@ export default async function GroupDetailPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/practice?group=${group.id}`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
-          >
-            <BrainCircuit size={16} />
-            Practice
-          </Link>
+          {pro ? (
+            <Link
+              href={`/practice?group=${group.id}`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
+            >
+              <BrainCircuit size={16} />
+              Practice
+            </Link>
+          ) : (
+            <Link
+              href="/upgrade"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-ink-secondary hover:bg-border-subtle transition-colors"
+            >
+              <BrainCircuit size={16} />
+              Practice
+            </Link>
+          )}
           <DeleteGroupButton id={group.id} />
         </div>
       </div>

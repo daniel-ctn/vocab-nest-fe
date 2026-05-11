@@ -7,6 +7,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { requireUser } from '@/lib/session'
+import { isPro } from '@/lib/data/subscription'
 import { getLearningStats } from '@/lib/data/stats'
 
 function StatCard({
@@ -35,6 +36,27 @@ function StatCard({
 
 export default async function StatsPage() {
   const user = await requireUser()
+  const pro = await isPro(user.id)
+
+  if (!pro) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+        <h2 className="font-display text-2xl font-semibold text-ink">
+          Pro feature
+        </h2>
+        <p className="text-ink-secondary max-w-sm">
+          Advanced stats and insights are available on the Pro plan.
+        </p>
+        <Link
+          href="/upgrade"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
+        >
+          Upgrade to Pro
+        </Link>
+      </div>
+    )
+  }
+
   const stats = await getLearningStats(user.id)
 
   const totalMastery = stats.masteryDistribution.reduce(
