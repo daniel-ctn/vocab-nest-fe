@@ -1,10 +1,16 @@
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
+import type Stripe from 'stripe'
 import { getStripe } from '@/lib/stripe'
 import { db } from '@/lib/db'
 import { subscriptions, user } from '@/lib/db/schema'
-
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+import { upsertSubscription } from '@/lib/data/subscription'
+import {
+  getCurrentPeriodEnd,
+  getFirstPriceId,
+  getMetadataUserId,
+  getStripeReferenceId,
+} from '@/lib/stripe-webhook'
 
 const relevantEvents = new Set([
   'checkout.session.completed',
@@ -12,6 +18,68 @@ const relevantEvents = new Set([
   'customer.subscription.updated',
   'customer.subscription.deleted',
 ])
+
+function getWebhookSecret() {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!secret) {
+    throw new Error('STRIPE_WEBHOOK_SECRET is not set')
+  }
+  return secret
+}
+
+async function getUserIdById(userId: string) {
+  const userRow = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
+    .then((rows) => rows[0])
+
+  return userRow?.id ?? null
+}
+
+async function getUserIdByEmail(email: string | null | undefined) {
+  if (!email) return null
+
+  const userRow = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1)
+    .then((rows) => rows[0])
+
+  return userRow?.id ?? null
+}
+
+async function getExistingSubscriptionUserId(customerId: string) {
+  const subRow = await db
+    .select({ userId: subscriptions.userId })
+    .from(subscriptions)
+    .where(eq(subscriptions.stripeCustomerId, customerId))
+    .limit(1)
+    .then((rows) => rows[0])
+
+  return subRow?.userId ?? null
+}
+
+async function upsertStripeSubscription(
+  subscription: Stripe.Subscription,
+  userId: string | null
+) {
+  const customerId = getStripeReferenceId(subscription.customer)
+  if (!customerId || !userId) return false
+
+  await upsertSubscription({
+    userId,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    stripePriceId: getFirstPriceId(subscription),
+    status: subscription.status,
+    currentPeriodEnd: getCurrentPeriodEnd(subscription),
+  })
+
+  return true
+}
 
 export async function POST(req: Request) {
   const payload = await req.text()
@@ -22,7 +90,11 @@ export async function POST(req: Request) {
   let event: ReturnType<typeof stripe.webhooks.constructEvent>
 
   try {
-    event = stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+    event = stripe.webhooks.constructEvent(
+      payload,
+      signature,
+      getWebhookSecret()
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 400 })
@@ -35,113 +107,72 @@ export async function POST(req: Request) {
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
-        const session = event.data.object as any
+        const session = event.data.object as Stripe.Checkout.Session
         if (session.mode === 'subscription' && session.customer) {
-          const customerId =
-            typeof session.customer === 'string'
-              ? session.customer
-              : session.customer.id
+          const metadataUserId = getMetadataUserId(session)
+          const userId = metadataUserId
+            ? await getUserIdById(metadataUserId)
+            : await getUserIdByEmail(
+                session.customer_details?.email ?? session.customer_email
+              )
 
-          const userRow = await db
-            .select()
-            .from(user)
-            .where(eq(user.email, session.customer_email ?? ''))
-            .limit(1)
-            .then((rows) => rows[0])
-
-          if (!userRow) {
+          if (!userId) {
             return NextResponse.json(
               { error: 'User not found' },
               { status: 404 }
             )
           }
 
-          const subscription = await getStripe().subscriptions.retrieve(
-            session.subscription as string
-          )
-          const subData = subscription as any
+          const subscriptionId = getStripeReferenceId(session.subscription)
+          if (!subscriptionId) {
+            return NextResponse.json(
+              { error: 'Subscription not found' },
+              { status: 404 }
+            )
+          }
 
-          await db
-            .insert(subscriptions)
-            .values({
-              userId: userRow.id,
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subData.id,
-              stripePriceId: subData.items.data[0]?.price.id ?? null,
-              status: subData.status,
-              currentPeriodEnd: new Date(subData.current_period_end * 1000),
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .onConflictDoUpdate({
-              target: subscriptions.userId,
-              set: {
-                stripeCustomerId: customerId,
-                stripeSubscriptionId: subData.id,
-                stripePriceId: subData.items.data[0]?.price.id ?? null,
-                status: subData.status,
-                currentPeriodEnd: new Date(subData.current_period_end * 1000),
-                updatedAt: new Date(),
-              },
-            })
+          const subscription =
+            await getStripe().subscriptions.retrieve(subscriptionId)
+          await upsertStripeSubscription(subscription, userId)
         }
         break
       }
 
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
-        const subscription = event.data.object as any
-        const customerId =
-          typeof subscription.customer === 'string'
-            ? subscription.customer
-            : subscription.customer.id
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId = getStripeReferenceId(subscription.customer)
 
-        const subRow = await db
-          .select()
-          .from(subscriptions)
-          .where(eq(subscriptions.stripeCustomerId, customerId))
-          .limit(1)
-          .then((rows) => rows[0])
+        if (!customerId) break
 
-        if (subRow) {
-          await db
-            .update(subscriptions)
-            .set({
-              stripeSubscriptionId: subscription.id,
-              stripePriceId: subscription.items.data[0]?.price.id ?? null,
-              status: subscription.status,
-              currentPeriodEnd: new Date(
-                subscription.current_period_end * 1000
-              ),
-              updatedAt: new Date(),
-            })
-            .where(eq(subscriptions.userId, subRow.userId))
-        }
+        const metadataUserId = getMetadataUserId(subscription)
+        const userId = metadataUserId
+          ? await getUserIdById(metadataUserId)
+          : await getExistingSubscriptionUserId(customerId)
+
+        await upsertStripeSubscription(subscription, userId)
         break
       }
 
       case 'customer.subscription.deleted': {
-        const subscription = event.data.object as any
-        const customerId =
-          typeof subscription.customer === 'string'
-            ? subscription.customer
-            : subscription.customer.id
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId = getStripeReferenceId(subscription.customer)
 
-        const subRow = await db
-          .select()
-          .from(subscriptions)
-          .where(eq(subscriptions.stripeCustomerId, customerId))
-          .limit(1)
-          .then((rows) => rows[0])
+        if (!customerId) break
 
-        if (subRow) {
+        const metadataUserId = getMetadataUserId(subscription)
+        const userId = metadataUserId
+          ? await getUserIdById(metadataUserId)
+          : await getExistingSubscriptionUserId(customerId)
+
+        if (userId) {
           await db
             .update(subscriptions)
             .set({
               status: 'canceled',
               updatedAt: new Date(),
             })
-            .where(eq(subscriptions.userId, subRow.userId))
+            .where(eq(subscriptions.userId, userId))
         }
         break
       }

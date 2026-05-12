@@ -1,9 +1,19 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getStripe, getStripePriceId, getStripeAnnualPriceId } from '@/lib/stripe'
+import {
+  getStripe,
+  getStripePriceId,
+  getStripeAnnualPriceId,
+} from '@/lib/stripe'
 import { requireUser } from '@/lib/session'
-import { getSubscription } from '@/lib/data/subscription'
+import { getSubscription, upsertSubscription } from '@/lib/data/subscription'
+import {
+  getCurrentPeriodEnd,
+  getFirstPriceId,
+  getMetadataUserId,
+  getStripeReferenceId,
+} from '@/lib/stripe-webhook'
 
 export async function createCheckoutSession(
   priceId?: string
@@ -11,7 +21,8 @@ export async function createCheckoutSession(
   const user = await requireUser()
   const sub = await getSubscription(user.id)
 
-  const selectedPriceId = priceId || getStripeAnnualPriceId() || getStripePriceId()
+  const selectedPriceId =
+    priceId || getStripeAnnualPriceId() || getStripePriceId()
 
   const session = await getStripe().checkout.sessions.create({
     customer: sub?.stripeCustomerId ?? undefined,
@@ -23,7 +34,7 @@ export async function createCheckoutSession(
       },
     ],
     mode: 'subscription',
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings/billing?success=1`,
+    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings/billing?success=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/upgrade?canceled=1`,
     metadata: {
       userId: user.id,
@@ -40,6 +51,39 @@ export async function createCheckoutSession(
   }
 
   return { url: session.url }
+}
+
+export async function syncCheckoutSession(sessionId: string) {
+  const user = await requireUser()
+
+  const session = await getStripe().checkout.sessions.retrieve(sessionId)
+  const metadataUserId = getMetadataUserId(session)
+
+  if (metadataUserId !== user.id) {
+    throw new Error('Checkout session does not belong to the current user')
+  }
+
+  const subscriptionId = getStripeReferenceId(session.subscription)
+  const customerId = getStripeReferenceId(session.customer)
+
+  if (session.mode !== 'subscription' || !subscriptionId || !customerId) {
+    return { status: 'inactive' }
+  }
+
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
+
+  await upsertSubscription({
+    userId: user.id,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    stripePriceId: getFirstPriceId(subscription),
+    status: subscription.status,
+    currentPeriodEnd: getCurrentPeriodEnd(subscription),
+  })
+
+  revalidatePath('/settings/billing')
+
+  return { status: subscription.status }
 }
 
 export async function createPortalSession(): Promise<{ url: string }> {
@@ -83,7 +127,7 @@ export async function syncSubscription() {
     .update(subscriptions)
     .set({
       status: stripeSub.status,
-      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+      currentPeriodEnd: getCurrentPeriodEnd(stripeSub),
       updatedAt: new Date(),
     })
     .where(eq(subscriptions.userId, user.id))

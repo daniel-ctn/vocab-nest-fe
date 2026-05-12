@@ -1,17 +1,35 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, CreditCard, Zap, CheckCircle, AlertCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  CreditCard,
+  Zap,
+  CheckCircle,
+  AlertCircle,
+} from 'lucide-react'
 import { requireUser } from '@/lib/session'
 import { getSubscription } from '@/lib/data/subscription'
-import { createPortalSession, syncSubscription } from '@/lib/actions/billing'
+import {
+  createPortalSession,
+  syncCheckoutSession,
+  syncSubscription,
+} from '@/lib/actions/billing'
 
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ success?: string }>
+  searchParams: Promise<{ success?: string; session_id?: string }>
 }) {
-  const { success } = await searchParams
+  const { success, session_id: sessionId } = await searchParams
   const user = await requireUser()
+
+  if (success && sessionId) {
+    try {
+      await syncCheckoutSession(sessionId)
+    } catch {
+      // Keep rendering billing state from the database if Stripe sync is delayed.
+    }
+  }
 
   let sub: Awaited<ReturnType<typeof getSubscription>> = null
   try {
@@ -56,9 +74,17 @@ export default async function BillingPage({
       </div>
 
       {success && (
-        <div className="p-4 rounded-xl bg-success-subtle text-success text-sm flex items-center gap-2">
-          <CheckCircle size={16} />
-          Welcome to Pro! Your subscription is now active.
+        <div
+          className={`p-4 rounded-xl text-sm flex items-center gap-2 ${
+            isPro
+              ? 'bg-success-subtle text-success'
+              : 'bg-accent-subtle text-accent'
+          }`}
+        >
+          {isPro ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+          {isPro
+            ? 'Welcome to Pro! Your subscription is now active.'
+            : 'Payment completed. Your plan will update after Stripe confirms the subscription.'}
         </div>
       )}
 
@@ -66,7 +92,9 @@ export default async function BillingPage({
         <div className="flex items-center gap-3">
           <div
             className={`flex items-center justify-center w-10 h-10 rounded-lg ${
-              isPro ? 'bg-accent text-white' : 'bg-border-subtle text-ink-secondary'
+              isPro
+                ? 'bg-accent text-white'
+                : 'bg-border-subtle text-ink-secondary'
             }`}
           >
             <Zap size={18} />
@@ -140,9 +168,7 @@ export default async function BillingPage({
             </div>
             <div>
               <div className="text-ink-secondary">Current period ends</div>
-              <div className="text-ink font-medium">
-                {periodEnd ?? '—'}
-              </div>
+              <div className="text-ink font-medium">{periodEnd ?? '—'}</div>
             </div>
           </div>
         </div>
