@@ -9,7 +9,7 @@ export function Skeleton({
 }) {
   return (
     <div
-      className={cn('animate-pulse bg-border-subtle', className)}
+      className={cn('animate-skeleton bg-border-subtle', className)}
       style={style}
     />
   )

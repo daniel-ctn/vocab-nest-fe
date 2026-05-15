@@ -1,28 +1,9 @@
-import {
-  SkeletonChapterHeader,
-  SkeletonRow,
-  SkeletonStatBlock,
-} from '@/components/skeleton'
+import { Loading } from '@/components/ui/loading'
 
 export default function AppLoading() {
   return (
-    <div className="space-y-12 animate-fade-up">
-      <SkeletonChapterHeader />
-
-      <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3">
-        <SkeletonStatBlock />
-        <SkeletonStatBlock />
-        <SkeletonStatBlock />
-      </div>
-
-      <div className="space-y-2">
-        <div className="divide-y divide-rule">
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      </div>
+    <div className="flex min-h-[70vh] flex-col items-center justify-center">
+      <Loading label="Gathering your words" />
     </div>
   )
 }

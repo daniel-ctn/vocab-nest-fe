@@ -132,6 +132,38 @@
   }
 }
 
+/* The Ruling — a hairline drawn on from the left, held, then lifted to the
+ * right. Staggered across a few rules it reads as a page being ruled. */
+@keyframes vn-rule-loop {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  45% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  55% {
+    transform: scaleX(1);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+
+/* Skeleton — paper breathing, not a neon pulse. */
+@keyframes vn-skeleton {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* ──── Custom utilities ──── */
 @utility animate-rule-draw {
   animation: vn-rule-draw 600ms var(--ease-paper) both;
@@ -144,6 +176,14 @@
 
 @utility animate-stroke-draw {
   animation: vn-stroke-draw 320ms var(--ease-paper) both;
+}
+
+@utility animate-rule-loop {
+  animation: vn-rule-loop 1800ms var(--ease-paper) infinite;
+}
+
+@utility animate-skeleton {
+  animation: vn-skeleton 1600ms var(--ease-paper) infinite;
 }
 
 @utility perspective-1200 {
